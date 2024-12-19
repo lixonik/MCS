@@ -10,6 +10,7 @@ class Euler:
         return x + dx * h
 
 class Sprott():
+    
     @property
     def initConditions(self):
         return (0.1, 0, 0)
@@ -22,45 +23,48 @@ class Sprott():
     def calculate(self, xyz: list[float]) -> list[float]:
         x, y, z = xyz
         return np.array([-0.2 * y, 
-                x + z, 
-                x + y**2 - z])
+                         x + z, 
+                         x + y**2 - z])
     
     @classmethod
     def jacobian(self, xyz: list[float]) -> list[float]:
-        y = xyz[1]
-        return np.array([[0, -0.2, 0], 
-                         [1, 0, 1], 
-                         [1, 2*y, -1]])
+        x, y, z = xyz.flatten()
+        return np.array([[0, -0.2,  0], 
+                         [1,  0,    1], 
+                         [1,  2*y, -1]])
 
 class KalmanFilter:
-    def __init__(self, processNoise, measurementNoise, init_state) -> None:
+    def __init__(self, processNoise, measurementNoise, init_state, ode, integrator) -> None:
         # Filter parameters
         self._state = init_state.reshape(3, 1) # initial state [x, y, z]
         
         self._F = np.eye(3) # transition matrix
-        # self._F = Lorenz.jacobian(self._state)
         self._H = np.eye(3) # observation matrix
         self._P = np.eye(3) # covariance matrix
 
         self._Q = np.eye(3) * processNoise  # covariance of the process noise
         self._R = np.eye(3) * measurementNoise  # covariance of the observation noise
-        self._ODE = Sprott()
+        self._ODE = ode # nonlinear dynamical system
+        self._integrator = integrator
     
     def predict(self) -> None:
-        # x = F*x
+        # F = I + h*J
+        # x = f(x)
         # P = F*P*F.T + Q
-        
+
+        # Update transition matrix
+        self._F = np.eye(3) + self._ODE.stepSize*self._ODE.jacobian(self._state)
+
         # Predict new state
-        self._state = np.dot(self._F, self._state)
-        # self._state = Euler.integrate(self._ODE.calculate, self._state, self._ODE.stepSize)
+        self._state = self._integrator.integrate(self._ODE.calculate, self._state, self._ODE.stepSize)
         
         # Predict covariance fault
         self._P = np.dot(self._F, np.dot(self._P, self._F.T)) + self._Q
         
     def correct(self, measurement):
-        # y = z - H*x
         # S = H*P*H.T + R
         # K = P*H*S^(-1)
+        # y = z - H*x
         # x = x + K*y
         # P = (I - K*H)*P
         
@@ -78,10 +82,12 @@ class KalmanFilter:
         # Update the covariance fault
         I = np.eye(self._P.shape[0])  # unit matrix of dimention as P
         self._P = (I - np.dot(K, self._H)).dot(self._P)
+        
     
     @property
     def state(self) -> np.array:
         return self._state.flatten()
+    
       
 def plot(noisyData, filteredData, simulatedData, xRange, label1, label2):
     fig = plt.figure()
@@ -168,7 +174,7 @@ INTEGRATOR = Euler()
 def main():  
     # Getting noisy measurments from a file
     noisyData = []
-    path = "../data/data3.txt"
+    path = "./data/data3.txt"
         
     with open(path, "r") as file:
         for line in file:
@@ -191,7 +197,7 @@ def main():
     initState = np.array([0.1, 0.1, 0.1])
 
     # Filter initalization
-    kf = KalmanFilter(processNoise, measurementNoise, initState)
+    kf = KalmanFilter(processNoise, measurementNoise, initState, ODE, INTEGRATOR)
 
     # Filtering process
     filteredData = []
@@ -207,8 +213,8 @@ def main():
     for i in range(num_steps):
         xRange.append(ODE.stepSize * i)
         
-    label1 = "Фазовый портрет"
-    label2 = "Временная диаграмма"
+    label1 = "Фазовая область решения"
+    label2 = "Временная область решения"
         
     # Visualization
     plot(noisyData, filteredData, simulatedData, xRange, label1, label2)

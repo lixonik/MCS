@@ -5,3 +5,4 @@ class Euler:
     def integrate(cls, f: Callable, x: List[int], h: int) -> List[int]:
         dx = f(x)
         return x + dx * h
+    

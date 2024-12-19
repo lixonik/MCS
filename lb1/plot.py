@@ -79,6 +79,3 @@ def plot(noisyData, filteredData, simulatedData, xRange, label1, label2):
 
     plt.tight_layout()
     plt.show()
-
-ODE = Sprott()
-INTEGRATOR = Euler()
